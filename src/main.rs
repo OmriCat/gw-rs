@@ -9,10 +9,10 @@ static GRADLEW: &str = "gradlew";
 #[cfg(windows)]
 static GRADLEW: &str = "gradlew.bat";
 
-static BUILD_FILE: &str = "build.gradle";
-static BUILD_FILE_KT: &str = "build.gradle.kts";
+static SETTINGS_FILE: &str = "settings.gradle";
+static SETTINGS_FILE_KT: &str = "settings.gradle.kts";
 
-static GRALDE_BIN: &str = "gradle";
+static GRADLE_BIN: &str = "gradle";
 
 fn main() {
     #[cfg(windows)]
@@ -24,24 +24,27 @@ fn main() {
 
     let current_dir = env::current_dir().expect("no current dir :-9?");
 
-    let found_build_file_path = find_path_containing_recursive(&current_dir, &is_build_file);
+    let found_build_file_path = find_path_containing_recursive(&current_dir, &is_settings_file);
 
     match found_build_file_path {
         None => {
-            eprintln!("Did not find {} or {} file!", BUILD_FILE, BUILD_FILE_KT);
+            eprintln!(
+                "Did not find {} or {} file!",
+                SETTINGS_FILE, SETTINGS_FILE_KT
+            );
             exit(1)
         }
-        Some(build_file_path) => {
+        Some(settings_file_path) => {
             let found_wrapper_path = find_path_containing_recursive(&current_dir, &is_gradlew);
 
             match found_wrapper_path {
                 None => {
                     eprintln!("Did not find gradlew wrapper! Trying gradle from $PATH");
-                    execute(&PathBuf::from(GRALDE_BIN), &build_file_path)
+                    execute(&PathBuf::from(GRADLE_BIN), &settings_file_path)
                 }
                 Some(wrapper_path) => {
                     let wrapper_file = wrapper_path.join(PathBuf::from(GRADLEW));
-                    execute(&wrapper_file, &build_file_path)
+                    execute(&wrapper_file, &settings_file_path)
                 }
             }
         }
@@ -49,11 +52,11 @@ fn main() {
 }
 
 fn is_gradlew(path: &Path) -> bool {
-    path.ends_with(&PathBuf::from(GRADLEW))
+    path.ends_with(PathBuf::from(GRADLEW))
 }
 
-fn is_build_file(path: &Path) -> bool {
-    path.ends_with(&PathBuf::from(BUILD_FILE)) || path.ends_with(&PathBuf::from(BUILD_FILE_KT))
+fn is_settings_file(path: &Path) -> bool {
+    path.ends_with(PathBuf::from(SETTINGS_FILE)) || path.ends_with(PathBuf::from(SETTINGS_FILE_KT))
 }
 
 fn find_path_containing_recursive(
@@ -82,8 +85,20 @@ fn find_file_in_dir(dir: &PathBuf, matches: &dyn Fn(&Path) -> bool) -> bool {
 
 // https://stackoverflow.com/a/53479765
 pub fn execute(gradle_path: &PathBuf, working_directory: &PathBuf) {
-    let args: Vec<String> = env::args().skip(1).collect();
-    println!("Executing {} {}", gradle_path.display(), args.join(" "));
+    let args: Vec<String> = {
+        let mut args = vec![
+            "--project-dir".to_string(),
+            working_directory.to_str().unwrap().to_string(),
+        ];
+        args.extend(env::args().skip(1));
+        args
+    };
+    println!(
+        "Executing {} {} from directory {}",
+        gradle_path.display(),
+        args.join(" "),
+        working_directory.display()
+    );
 
     let spawn_result = Command::new(gradle_path)
         .current_dir(working_directory)
